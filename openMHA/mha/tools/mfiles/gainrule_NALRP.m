@@ -1,0 +1,13 @@
+function sGt = gainrule_NALRP( sAud, sCfg )
+  nLev = length(sCfg.levels);
+  hAud = libaudprof();
+  sThrL = audprof.threshold_get( sAud, 'l', 'htl_ac' );
+  sThrR = audprof.threshold_get( sAud, 'r', 'htl_ac' );
+  g_L = NalRP([sThrL.data.hl],[sThrL.data.f],sCfg.frequencies)';
+  g_R = NalRP([sThrR.data.hl],[sThrR.data.f],sCfg.frequencies)';
+  sGt = struct;
+  sGt.l = repmat(g_L,[nLev 1]);
+  sGt.r = repmat(g_R,[nLev 1]);
+  sGt.noisegate.l.level = -40*ones(size(sCfg.frequencies));
+  sGt.noisegate.l.slope = ones(size(sCfg.frequencies));
+  sGt.noisegate.r = sGt.noisegate.l;

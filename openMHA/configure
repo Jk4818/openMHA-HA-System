@@ -1,0 +1,239 @@
+#!/bin/bash
+
+# This file is part of the HörTech Open Master Hearing Aid (openMHA)
+# Copyright © 2013 2014 2015 2016 2017 2018 2019 2020 2021 HörTech gGmbH
+# Copyright © 2022 Hörzentrum Oldenburg gGmbH
+#
+# openMHA is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, version 3 of the License.
+#
+# openMHA is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License, version 3 for more details.
+#
+# You should have received a copy of the GNU Affero General Public License,
+# version 3 along with openMHA.  If not, see <http://www.gnu.org/licenses/>.
+
+chkhdr(){
+    echo "#include <$1>" | cc -E -x c++ - $MACINCLUDES -o /dev/null 2>/dev/null 1>/dev/null && true || false;
+}
+chklib(){
+    echo "int main(){return 0;}"| cc -x c++ - $MACLDFLAGS -l$1 -o /tmp/tmp.openmha.config.out.exe 2>/dev/null 1>/dev/null && true || false;
+}
+gccver(){
+    gcc -dumpversion | head -1|sed -e 's/.*[[:blank:]]//' -e 's/\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\)/-\1/' -e 's/^[0-9]/-&/1'
+}
+
+PREFIX=$(pwd)
+DEBUG="-g"
+for arg in "$@"; do
+    case "$arg" in
+        --prefix=*)
+            PREFIX=`echo $arg | sed 's/--prefix=//'`
+            ;;
+        --debug)
+            DEBUG="-g"
+            ;;
+        --nodebug)
+            DEBUG=""
+            ;;
+        --debug=*)
+            DEBUG=`echo $arg | sed 's/--debug=/-g/'`
+            ;;
+        --with-alsa=*)
+            WITH_ALSA=`echo $arg | sed 's/--with-alsa=//'`
+            ;;
+        --arch=*)
+            ARCH=`echo $arg | sed 's/--arch=//'`
+            ;;
+        --with-lsl)
+            WITH_LSL=yes
+            ;;
+        --with-eigen)
+            WITH_EIGEN=yes
+            ;;
+        --with-jack=*)
+            WITH_JACK=`echo $arg | sed 's/--with-jack=//'`
+            ;;
+        --with-lsl=*)
+            WITH_LSL=`echo $arg | sed 's/--with-lsl=//'`
+            ;;
+        --with-eigen=*)
+            WITH_EIGEN=`echo $arg | sed 's/--with-eigen=//'`
+            ;;
+        --with-osc=*)
+            WITH_OSC=`echo $arg | sed 's/--with-osc=//'`
+            ;;
+        --help)
+            echo 'usage: ./configure [options]'
+            echo 'options:'
+            echo '  --prefix=<path>: installation prefix'
+            echo '  --debug : include debug symbols (default)'
+            echo '  --debug=<debugger> : include debug symbols for <debugger>'
+            echo '  --nodebug : do not include debug symbols'
+            echo '  --arch=<arch>: the target arch'
+            echo '  --with-alsa=[yes|no]: override auto detection of ALSA'
+            echo '  --with-eigen: override auto detection of Eigen'
+            echo '  --with-lsl=[yes|no]: override auto detection of LSL'
+            echo '  --with-osc=[yes|no]: override auto detection of liblo'
+            echo 'all invalid options are silently ignored'
+            exit 0
+            ;;
+    esac
+done
+(
+    if [ "x$ARCH" = "x" ]; then
+        ARCH=`uname -m`
+    fi
+
+    # Add operating-system specific settings
+    case `uname -s` in
+        *Linux*)
+            PLATFORM=linux
+            echo PLATFORM=linux
+            echo DYNAMIC_LIB_EXT=".so"
+            GCC_VER=`gccver`
+            ;;
+        *Cygwin* | *Msys* | *MinGW* | *MINGW* )
+            PLATFORM=MinGW
+            echo PLATFORM=MinGW
+            echo DYNAMIC_LIB_EXT=".dll"
+            GCC_VER=`gccver`
+            ;;
+        Darwin)
+            PLATFORM=Darwin
+            echo PLATFORM=Darwin
+            echo DYNAMIC_LIB_EXT=".dylib"
+            echo BUILD_DIR=${ARCH}-${PLATFORM}-clang
+            echo TOOLSET=clang
+            WITH_JACK=yes
+            # We do not want warnings from external headers, so use -isystem instead of -I
+            if [ -d "/opt/local/include" ]; then
+                MACINCLUDES+=" -isystem/opt/local/include"
+            fi
+            if [ -d "/opt/local/lib" ]; then
+                MACLDFLAGS+=" -L/opt/local/lib"
+                echo LDFLAGS+=" -L/opt/local/lib"
+            fi
+            # On arm macs homebrew saves its stuff into /opt/homebrew/...
+            if [ -d "/opt/homebrew/include" ]; then
+                MACINCLUDES+=" -isystem/opt/homebrew/include"
+            fi
+            if [ -d "/opt/homebrew/lib" ]; then
+                MACLDFLAGS+=" -L/opt/homebrew/lib"
+                echo LDFLAGS+=" -L/opt/homebrew/lib"
+            fi
+            MACCXXFLAGS+="-Wno-error=unused-command-line-argument -Wimplicit-fallthrough"
+    esac
+    echo ARCH=$ARCH
+    echo PREFIX=$PREFIX
+
+    if [ "x$WITH_ALSA" = "xyes" ]; then
+        echo "WITH_ALSA=yes";
+    elif [ "x$WITH_ALSA" = "xno" ]; then
+        echo "WITH_ALSA=no";
+    else
+        pkg-config alsa && (echo "WITH_ALSA=yes")
+    fi
+
+    if [ "x$PLATFORM" = "xMinGW" ]; then
+        WITH_JACK=yes
+    fi
+
+    if [ "x$WITH_JACK" = "xyes" ]; then
+        echo "WITH_JACK=yes";
+    elif [ "x$WITH_JACK" = "xno" ]; then
+        echo "WITH_JACK=no";
+    else
+        pkg-config jack && (echo "WITH_JACK=yes")
+    fi
+
+    if [ "x$WITH_LSL" = "xyes" ]; then
+        echo "WITH_LSL=yes";
+    elif [ "x$WITH_LSL" = "xno" ]; then
+        echo "WITH_LSL=no";
+    else
+        chkhdr lsl_cpp.h && chklib lsl && (echo "WITH_LSL=yes");
+    fi
+
+    if [ "x$WITH_OSC" = "xyes" ]; then
+        echo "WITH_OSC=yes";
+    elif [ "x$WITH_OSC" = "xno" ]; then
+        echo "WITH_OSC=no";
+    else
+        chkhdr lo/lo.h && chklib lo && (echo "WITH_OSC=yes");
+    fi
+
+    if [ "x$WITH_EIGEN" = "xyes" ]; then
+        echo "WITH_EIGEN=yes";
+    elif [ "x$WITH_EIGEN" = "xno" ]; then
+        echo "WITH_EIGEN=no";
+    else
+        chkhdr eigen3/Eigen/Eigen && (echo "WITH_EIGEN=yes");
+    fi
+
+    if [ "x$CXXSTANDARD" = "x" ]; then
+        case "$GCC_VER" in
+            *)
+                CXXSTANDARD=c++17
+                ;;
+        esac
+    fi
+    echo "CXXSTANDARD=$CXXSTANDARD";
+
+    if test -n "$GCC_VER"
+    then
+            echo GCC_VER=${GCC_VER}
+            echo BUILD_DIR=${ARCH}-${PLATFORM}-gcc${GCC_VER}
+            echo "CXXFLAGS+=-Wmisleading-indentation  -Wlogical-op -Wduplicated-cond -Wduplicated-branches"\
+                 " -Wformat-signedness";
+            echo "CFLAGS+=-Wmisleading-indentation  -Wlogical-op -Wduplicated-cond -Wduplicated-branches";
+    fi
+
+    # Add CPU-specific compiler options:
+    case $ARCH in
+        armhf)
+            # User wants to cross-compile for 32 bit ARM Linux
+            echo "COMPILERPREFIX=arm-linux-gnueabihf-"
+            ;;
+        arm64)
+            # This is most likely an ARM Mac. No extra settings.
+            ;;
+        arm*)
+            # Some variants of 32 bit ARM Linux, native compilation.
+            echo "SSE+=-mcpu=cortex-a8 -mfloat-abi=hard -mfpu=neon"
+            ;;
+        aarch64)
+            # 64 bit ARM Linux, native compilation
+            echo "SSE+=-mcpu=cortex-a73.cortex-a53" # Remove this line if the
+            # generated binaries do not execute correctly on your aarch64 board.
+            ;;
+        x86_64*|i686*)
+            # PC (Windows, Linux, or Mac)
+            echo "SSE+=-msse -msse2 -mfpmath=sse"
+            ;;
+    esac
+
+    if type -P ccache >/dev/null
+    then
+        echo 'COMPILERPREFIX:=ccache $(COMPILERPREFIX)'
+    fi
+
+    echo 'OPTIM=-O3 $(SSE) -ffast-math -fomit-frame-pointer -fno-finite-math-only'
+    echo 'CXXFLAGS+=-Wall -Wextra -Wnon-virtual-dtor -Wformat -Werror -std=$(CXXSTANDARD) -fPIC $(OPTIM)' ${MACINCLUDES} ${MACCXXFLAGS} $DEBUG
+    echo 'CFLAGS+=-Wall -Wextra -Werror -std=gnu11 -fPIC $(OPTIM)' ${MACINCLUDES} ${MACCXXFLAGS} $DEBUG
+    if [[ $(type -P octave) ]] ; then
+        echo "MHA_TEST_COMMAND=octave --no-gui --no-window-system --eval"\
+             "\"set_environment;exit(~run_mha_tests())\"";
+    elif [[ $(type -P matlab) ]]; then
+        echo "MHA_TEST_COMMAND=matlab -nodesktop -nosplash -nodisplay -r"\
+             "\"set_environment;exit(~run_mha_tests())\"";
+    fi
+) | tee config.mk
+
+# Local Variables:
+# coding: utf-8-unix
+# indent-tabs-mode: nil
+# End:

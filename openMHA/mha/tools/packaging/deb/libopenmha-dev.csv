@@ -1,0 +1,3 @@
+mha/libmha/src/*.h,usr/include/openmha/
+mha/libmha/src/*.hh,usr/include/openmha/
+COPYING,usr/share/doc/libopenmha-dev/
