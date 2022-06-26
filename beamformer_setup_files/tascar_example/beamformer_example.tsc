@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<session name="demo" license="CC BY-SA 3.0" attribution="Alastair H Moore" playonload="true" loop="true">
+
+	<scene name="main" guiscale="6">
+
+		<diffuse name="city">
+		<position>0 0 0 0</position>
+			<plugins>
+			<sndfile name="sounds/city_ambience.wav" loop="0" level="65" resample="true"/>
+			</plugins>
+		</diffuse>
+		
+		<source name="src/man">
+		<position>0 1.00 -0.3 0</position>
+		<sound>
+			<plugins>
+			<sndfile name="sounds/guy.wav" loop="0" level="55"/>
+			</plugins>
+		</sound>
+		</source>
+
+		<source name="src/woman">
+		<position>0 0.7 0.8 0</position>
+		<sound>
+			<plugins>
+			<sndfile name="sounds/woman.wav" loop="0" level="55"/>
+			</plugins>
+		</sound>
+		</source>
+
+		<source name="src/man_interfere">
+		<position>0 -1.23 0 0</position>
+		<sound>
+			<plugins>
+			<sndfile name="sounds/male_interference.wav" loop="0" level="55"/>
+			</plugins>
+		</sound>
+		</source>
+
+		<receiver name="out" type="hoa3d_enc" order="7">
+			<position>0 0 0 0</position>
+			<!-- <orientation importcsv="demo_04_data/stepped_rotation.csv" /> -->
+		</receiver>
+
+	</scene>
+	<connect src="render.main:out_l" dest="system:playback_1" />
+	<connect src="render.main:out_r" dest="system:playback_2" />
+	<modules>
+		<pos2osc url="osc.udp://127.0.0.1:7779/" pattern="/*/out*" mode="0"/>
+		<pos2osc url="osc.udp://192.168.0.31:7778/" pattern="/*/src/*" mode="3"/>
+	</modules>
+</session>
